@@ -58,5 +58,21 @@ READ("%f", &my_float);
 
 ### Static Helper Functions
 
--   **`stof(const char *s)`**: Converts a string to a `float`. This function handles an optional sign, an integer part, and a decimal part.
--   **`ftos(float value)`**: Converts a `float` to a string and prints it to the UART output. It handles the sign, integer part, and a fixed precision of 4 decimal places.
+#### `ftos(float value)`: Float to String Conversion
+
+This function converts a floating-point number to its string representation for printing. While a float is internally represented by a sign, an exponent, and a mantissa (according to the IEEE 754 standard), this conversion algorithm operates on its decimal representation.
+
+The logic is as follows:
+1.  **Sign Handling**: It first checks if the number is negative. If it is, the sign is stored, and the absolute value of the number is used for the conversion. The sign is printed at the beginning.
+2.  **Integer Part**: The integer part of the number is extracted by casting the float to an integer. This integer part is then converted to a string and printed.
+3.  **Decimal Part**: The decimal part is obtained by subtracting the integer part from the original number. To print the decimal digits, this fractional part is multiplied by 10 repeatedly (for a fixed number of decimal places). In each step, the integer part of the result gives the next digit to print.
+
+#### `stof(const char *s)`: String to Float Conversion
+
+This function parses a string and converts it into a floating-point number.
+
+The algorithm follows these steps:
+1.  **Sign**: It checks for a leading `'-'` character to determine if the number is negative.
+2.  **Integer Part**: It reads the sequence of digits before the decimal point and builds the integer part of the number.
+3.  **Decimal Part**: If a `'.'` is found, it starts processing the fractional part. It reads each digit after the decimal point and adds it to the total, scaled by its corresponding power of 10 (0.1, 0.01, etc.).
+4.  **Final Value**: The final float is constructed by adding the integer and decimal parts and applying the sign.
