@@ -1,7 +1,7 @@
 # Qemu Calculator
 
 This project implements a simple calculator that can perform addition on both integers and floating-point numbers. The calculator runs on a custom OS environment and interacts with the user via a UART interface.
-![Qemu Calculator](002Calculator.png)
+![Qemu Calculator](002Calculadora.png)
 
 
 ## Project Structure
