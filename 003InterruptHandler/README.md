@@ -20,21 +20,3 @@ This project demonstrates a bare-metal application for the BeagleBone Black (ARM
     *   `build_and_run.sh`: Script to compile, link, and execute the project in QEMU.
     *   `bin/`: Directory for compiled object files and the final executable.
 
-## Build and Run
-
-To build and run this project, navigate to the `Code/` directory and execute the `build_and_run.sh` script:
-
-```bash
-cd Code/
-./build_and_run.sh
-```
-
-This script will:
-1.  Clean up previous build artifacts.
-2.  Assemble `root.s`.
-3.  Compile `os.c`.
-4.  Link the object files using `linker.ld`.
-5.  Convert the ELF executable to a binary.
-6.  Launch QEMU with the compiled program.
-
-The QEMU output will be directed to `stdout`.
