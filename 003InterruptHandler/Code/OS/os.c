@@ -102,7 +102,14 @@ void uart_putnum(unsigned int num) {
 // 9. Start timer in auto-reload mode (TCLR = 0x3)
 void timer_init(void) {
     // TODO: Implement timer initialization
-    os_write("Timer initialization not yet implemented\n");
+    PUT32(CM_PER_TIMER2_CLKCTRL, 0X2);
+    PUT32(INTC_MIR_CLEAR2, (1<<(68%32)));
+    PUT32(TCLR, 0X0);
+    PUT32(TISR, 0X7);
+    PUT32(TLDR, 0xFE91CA00);
+    PUT32(TCRR, 0xFE81CA00);
+    PUT32(TIER, 0x2);
+    PUT32(TCLR, 0X3);
 }
 
 // TODO: Implement timer interrupt handler
@@ -112,7 +119,9 @@ void timer_init(void) {
 // 3. Print "Tick\n" via UART
 void timer_irq_handler(void) {
     // TODO: Implement timer interrupt handler
-    os_write("Timer interrupt handler not yet implemented\n");
+    PUT32(TISR, 0x2);
+    PUT32(INTC_CONTROL, 0x1);
+    os_write("Tick\n");
 }
 
 // ============================================================================

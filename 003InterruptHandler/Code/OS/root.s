@@ -51,6 +51,10 @@ data_handler:
 // 4. Return from interrupt using: subs pc, lr, #4
 irq_handler:
     // TODO: Implement IRQ handler
+    push {r0-r12, lr} @ Save all registers
+    bl timer_irq_handler @ Call C handler
+    pop {r0-r12, lr} @ Restore registers
+    subs pc, lr, #4 @ Return from interrupt
     b hang
 
 fiq_handler:
@@ -75,6 +79,9 @@ GET32:
 .globl enable_irq
 enable_irq:
     // TODO: Implement enable_irq
+    mrs r0, cpsr
+    bic r0, r0, #0b10000000 //bit 7
+    msr cpsr_c, r0
     bx lr
 
 // Stack space allocation
