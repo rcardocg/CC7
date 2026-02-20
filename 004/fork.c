@@ -5,64 +5,132 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
-int main() {
-    int fd[2];          // Variable para el pipe
-    pid_t pid;          // Variable para almacenar el ID del proceso
-    char buffer[100];   // Espacio para guardar mensajes leídos
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <errno.h>
+
+static void die(const char *msg) {
+    perror(msg);
+    exit(EXIT_FAILURE);
+}
+
+int main(void) {
+    int fd[2];
+    pid_t pid;
+    char buffer[100];
     char message[] = "Hello from Parent";
 
-    // --- PASO 1 Y 2: Creación y Espera ---
+    // --- TASK 1 & 2: Creating & Synchronizing ---
+    printf("TASK 1 & 2: Creating & Synchronizing\n");
     pid = fork();
+    
+    if (pid < 0) die("fork");
 
     if (pid == 0) {
-        // Parte del hijo
         printf("Child Process: PID=%d, Parent PID=%d\n", getpid(), getppid());
-        sleep(1); 
-        exit(0); 
+        fflush(stdout);
+        sleep(1);
+        _exit(0);
     } else {
-        // Parte del padre
         printf("Parent Process: PID=%d\n", getpid());
-        waitpid(pid, NULL, 0); // Paso 2: El padre espera al hijo
+        fflush(stdout);
+
+        if (waitpid(pid, NULL, 0) < 0) die("waitpid");
         printf("---------------------\n\n");
     }
 
-    // --- PASO 3: Comunicación (Pipe) ---
-    pipe(fd); // Crea la tubería
+    // --- TASK 3: Communication (Pipe) ---
+    printf("TASK 3: Communication (Pipe)\n");
+    if (pipe(fd) < 0) die("pipe");
+
     pid = fork();
+    if (pid < 0) die("fork");
 
     if (pid == 0) {
-        // Parte del hijo
-        close(fd[1]); // Cierra escritura
-        read(fd[0], buffer, sizeof(buffer)); // Lee del pipe
-        printf("Paso 3 - Child Process: Received \"%s\"\n", buffer);
-        close(fd[0]);
-        exit(0);
-    } else {  
-        // Parte del padre
-        close(fd[0]); // Cierra lectura
-        printf("Paso 3 - Parent Process: Writing \"%s\"\n", message);
-        write(fd[1], message, strlen(message) + 1); // Envía mensaje
         close(fd[1]);
-        wait(NULL); 
-        printf("\n");
+        ssize_t n = read(fd[0], buffer, sizeof(buffer) - 1);
+        if (n < 0) die("read");
+        buffer[n] = '\0';
+
+        printf("Child Process: Received \"%s\"\n", buffer);
+        fflush(stdout);
+
+        close(fd[0]);
+        _exit(0);
+    } else {
+        close(fd[0]);
+
+        printf("Parent Process: Writing \"%s\"\n", message);
+        fflush(stdout);
+
+        size_t to_write = strlen(message) + 1;
+        ssize_t w = write(fd[1], message, to_write);
+        if (w < 0) die("write");
+        if ((size_t)w != to_write) {
+            fprintf(stderr, "write: partial write (%zd/%zu)\n", w, to_write);
+            exit(EXIT_FAILURE);
+        }
+
+        close(fd[1]);
+        if (waitpid(pid, NULL, 0) < 0) die("waitpid");
+        printf("---------------------\n\n");
     }
 
-    // --- PASO 4: Múltiples Hijos (Loop) ---
-    printf("Paso 4 - Parent Process: PID=%d\n", getpid());
+    // --- TASK 4: Multiple Child Processes ---
+    printf("TASK 4: MMultiple Child Processes\n");
+    printf("Parent Process: PID=%d\n", getpid());
+    fflush(stdout);
 
-    // Bucle para crear 3 hijos
     for (int i = 1; i <= 3; i++) {
         pid = fork();
+        if (pid < 0) die("fork");
 
         if (pid == 0) {
-            // Parte de cada hijo
             printf("Child %d: PID=%d, Parent PID=%d\n", i, getpid(), getppid());
-            exit(0); // El hijo termina para no repetir el bucle
+            fflush(stdout);
+            _exit(0);
         }
     }
 
     for (int i = 0; i < 3; i++) {
-        wait(NULL);
+        if (wait(NULL) < 0) die("wait");
+
+
+    }
+
+    // --- TASK 5: Shared Memory (Advanced Task) ---
+    printf("---------------------\n\n");
+    printf("TASK 5: Shared Memory (Advanced Task)\n");
+    const char shm_msg[] = "Shared Memory Example";
+
+    int shmid = shmget(IPC_PRIVATE, 128, IPC_CREAT | 0600);
+    if (shmid < 0) die("shmget");
+
+    pid = fork();
+    if (pid < 0) die("fork");
+
+    if (pid == 0) {
+        char *shm = (char *)shmat(shmid, NULL, 0);
+        if (shm == (char *)-1) die("shmat (child)");
+
+        printf("Child Process: Read \"%s\"\n", shm);
+        fflush(stdout);
+
+        if (shmdt(shm) < 0) die("shmdt (child)");
+        _exit(0);
+    } else {
+        char *shm = (char *)shmat(shmid, NULL, 0);
+        if (shm == (char *)-1) die("shmat (parent)");
+
+        snprintf(shm, 128, "%s", shm_msg);
+
+        printf("Parent Process: Writing \"%s\"\n", shm_msg);
+        fflush(stdout);
+
+        if (waitpid(pid, NULL, 0) < 0) die("waitpid");
+
+        if (shmdt(shm) < 0) die("shmdt (parent)");
+        if (shmctl(shmid, IPC_RMID, NULL) < 0) die("shmctl(IPC_RMID)");
     }
 
     return 0;
