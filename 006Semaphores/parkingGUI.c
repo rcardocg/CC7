@@ -3,7 +3,6 @@
 #include <SDL2/SDL_ttf.h>
 #include <pthread.h>
 #include <stdio.h>
-#include <string.h>
 
 #define WINDOW_WIDTH  700
 #define WINDOW_HEIGHT 280
@@ -103,6 +102,13 @@ void gui_set_slot_car(int slot, int car_id)
     pthread_mutex_unlock(&gui_mutex);
 }
 
+void gui_set_finished(bool finished)
+{
+    pthread_mutex_lock(&gui_mutex);
+    simulation_finished = finished;
+    pthread_mutex_unlock(&gui_mutex);
+}
+
 bool gui_process_frame(void)
 {
     SDL_Event e;
@@ -154,16 +160,16 @@ bool gui_process_frame(void)
         if (local_slot_car[i] != -1) {
             char car_label[32];
             snprintf(car_label, sizeof(car_label), "Car %d", local_slot_car[i]);
-            draw_text(car_label, box.x + 15, box.y + 35, black);
+            draw_text(car_label, box.x + 10, box.y + 35, black);
         }
     }
 
-    SDL_RenderPresent(renderer);
     if (finished) {
-    SDL_Color red = {200, 0, 0, 255};
-    draw_text("Simulation finished", 350, 30, red);
-}
+        SDL_Color red = {200, 0, 0, 255};
+        draw_text("Simulation finished", 220, 90, red);
+    }
 
+    SDL_RenderPresent(renderer);
     SDL_Delay(16);
     return true;
 }
@@ -178,11 +184,4 @@ void gui_close(void)
 
     TTF_Quit();
     SDL_Quit();
-}
-
-void gui_set_finished(bool finished)
-{
-    pthread_mutex_lock(&gui_mutex);
-    simulation_finished = finished;
-    pthread_mutex_unlock(&gui_mutex);
 }

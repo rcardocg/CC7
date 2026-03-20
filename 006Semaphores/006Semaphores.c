@@ -174,6 +174,9 @@ int main(void)
 
     // Loop principal de GUI
     bool running = true;
+    bool finished_shown = false;
+    bool stats_printed = false;
+
     while (running) {
         running = gui_process_frame();
 
@@ -181,21 +184,30 @@ int main(void)
         bool all_done = (finished_cars == NUM_CARS);
         pthread_mutex_unlock(&finish_mutex);
 
-        if (all_done) {
+        if (all_done && !finished_shown) {
             // Espera a que el usuario cierre la ventana
+            gui_set_finished(true);
+            finished_shown = true;
+        }
+
+        if (all_done && !stats_printed) {
+            // Esperar threads 
+            for (int i = 0; i < NUM_CARS; i++) {
+                pthread_join(threads[i], NULL);
+            }
+
+            // Estadísticas finales
+            printf("\nTotal cars parked: %d\n", total_cars_parked);
+            if (total_cars_parked > 0) {
+                printf("Average wait time: %.2f seconds\n",
+                       total_wait_time / total_cars_parked);
+            }
+
+            stats_printed = true;
         }
     }
 
-    // Esperar threads
-    for (int i = 0; i < NUM_CARS; i++)
-        pthread_join(threads[i], NULL);
-
-    // Estadísticas finales
-    printf("\nTotal cars parked: %d\n", total_cars_parked);
-    if (total_cars_parked > 0)
-        printf("Average wait time: %.2f seconds\n",
-               total_wait_time / total_cars_parked);
-
+    
     // Liberar recursos
     pthread_mutex_destroy(&parking_mutex);
     pthread_mutex_destroy(&log_mutex);
