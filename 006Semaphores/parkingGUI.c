@@ -159,6 +159,11 @@ bool gui_process_frame(void)
     }
 
     SDL_RenderPresent(renderer);
+    if (finished) {
+    SDL_Color red = {200, 0, 0, 255};
+    draw_text("Simulation finished", 350, 30, red);
+}
+
     SDL_Delay(16);
     return true;
 }
