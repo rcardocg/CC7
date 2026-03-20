@@ -3,6 +3,7 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <time.h>
+
 #include <stdbool.h>
 #include "parkingGUI.h"
 
@@ -24,13 +25,16 @@ pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
 // Mutex para estadísticas
 pthread_mutex_t stats_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+//Mutex para carros finalizados
+pthread_mutex_t finish_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 // Estadísticas compartidas
 int    total_cars_parked = 0;
 double total_wait_time   = 0.0;
 
 // Cuántos carros ya terminaron
 int finished_cars = 0;
-pthread_mutex_t finish_mutex = PTHREAD_MUTEX_INITIALIZER;
+int slot_car[NUM_SPACES] = {-1, -1, -1}; // Espacio libre = -1, (ID)
 
 
 // Imprime mensaje con timestamp
@@ -48,6 +52,29 @@ static void log_event(const char *msg)
     pthread_mutex_unlock(&log_mutex);
 }
 
+// Asigna un espacio a un carro
+static int assign_slot(int car_id)
+{
+    for (int i = 0; i < NUM_SPACES; i++) {
+        if (slot_car[i] == -1) {
+            slot_car[i] = car_id;
+            return i;
+        }
+    }
+    return -1;
+}
+
+//Libera el espacio 
+static void release_slot(int car_id)
+{
+    for (int i = 0; i < NUM_SPACES; i++) {
+        if (slot_car[i] == car_id) {
+            slot_car[i] = -1;
+            gui_set_slot_car(i, -1);
+            return;
+        }
+    }
+}
 
 // Función de cada carro
 static void *car_thread(void *arg)
@@ -68,12 +95,20 @@ static void *car_thread(void *arg)
         pthread_cond_wait(&space_available, &parking_mutex);
 
     available_spaces--;
-    gui_set_spaces(available_spaces, NUM_SPACES);   // actualizar GUI
+
+    // Asignar espacio y actualizar GUI
+    int slot = assign_slot(id);
+    if (slot != -1) {
+        gui_set_slot_car(slot, id);
+    }
+
+    gui_set_status(available_spaces, NUM_SPACES, NUM_CARS - finished_cars);   // actualizar GUI
     pthread_mutex_unlock(&parking_mutex);
 
     clock_gettime(CLOCK_MONOTONIC, &park_ts);
     double wait_sec = (park_ts.tv_sec  - arrive_ts.tv_sec) +
                       (park_ts.tv_nsec - arrive_ts.tv_nsec) / 1e9;
+
 
     // 3. Estacionado
     snprintf(msg, sizeof(msg),
@@ -90,8 +125,12 @@ static void *car_thread(void *arg)
     // 4. Salida
     pthread_mutex_lock(&parking_mutex);
     available_spaces++;
-    gui_set_spaces(available_spaces, NUM_SPACES);   // actualizar GUI
+
+    // Liberar slot
+    release_slot(id);
+
     pthread_cond_signal(&space_available);
+    gui_set_status(available_spaces, NUM_SPACES, NUM_CARS - finished_cars);   // actualizar GUI
     pthread_mutex_unlock(&parking_mutex);
 
     snprintf(msg, sizeof(msg), "Car %d: Leaving parking lot", id);
@@ -99,7 +138,10 @@ static void *car_thread(void *arg)
 
     pthread_mutex_lock(&finish_mutex);
     finished_cars++;
+    int active = NUM_CARS - finished_cars;
     pthread_mutex_unlock(&finish_mutex);
+
+    gui_set_status(available_spaces, NUM_SPACES, active);   // actualizar GUI
 
     return NULL;
 }
@@ -113,11 +155,11 @@ int main(void)
     srand((unsigned)time(NULL));
 
     if (!gui_init()) {
-        fprintf(stderr, "Error: could not initialize GUI\n");
+        fprintf(stderr, "Error: no se pudo inicializar la GUI\n");
         return EXIT_FAILURE;
     }
 
-    gui_set_spaces(NUM_SPACES, NUM_SPACES);
+    gui_set_status(NUM_SPACES, NUM_SPACES, NUM_CARS);
 
     // Crear un thread por carro
     for (int i = 0; i < NUM_CARS; i++) {
@@ -140,8 +182,7 @@ int main(void)
         pthread_mutex_unlock(&finish_mutex);
 
         if (all_done) {
-            sleep(1); // para que se vea el estado final un instante
-            break;
+            // Espera a que el usuario cierre la ventana
         }
     }
 

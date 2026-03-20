@@ -1,21 +1,52 @@
 #include "parkingGUI.h"
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_ttf.h>
 #include <pthread.h>
+#include <stdio.h>
+#include <string.h>
 
-#define WINDOW_WIDTH  500
-#define WINDOW_HEIGHT 250
+#define WINDOW_WIDTH  700
+#define WINDOW_HEIGHT 280
+#define NUM_SPACES 3
 
 static SDL_Window   *window   = NULL;
 static SDL_Renderer *renderer = NULL;
+static TTF_Font     *font     = NULL;
 
 static pthread_mutex_t gui_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static int current_available = 0;
 static int current_total = 0;
+static int current_active = 0;
+static int slot_car[NUM_SPACES] = {-1, -1, -1};
+static bool simulation_finished = false;
+
+static void draw_text(const char *text, int x, int y, SDL_Color color)
+{
+    SDL_Surface *surface = TTF_RenderText_Blended(font, text, color);
+    if (!surface) return;
+
+    SDL_Texture *texture = SDL_CreateTextureFromSurface(renderer, surface);
+    if (!texture) {
+        SDL_FreeSurface(surface);
+        return;
+    }
+
+    SDL_Rect dst = {x, y, surface->w, surface->h};
+    SDL_RenderCopy(renderer, texture, NULL, &dst);
+
+    SDL_DestroyTexture(texture);
+    SDL_FreeSurface(surface);
+}
 
 bool gui_init(void)
 {
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
+        return false;
+    }
+
+    if (TTF_Init() != 0) {
+        SDL_Quit();
         return false;
     }
 
@@ -29,6 +60,7 @@ bool gui_init(void)
     );
 
     if (!window) {
+        TTF_Quit();
         SDL_Quit();
         return false;
     }
@@ -36,6 +68,16 @@ bool gui_init(void)
     renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
     if (!renderer) {
         SDL_DestroyWindow(window);
+        TTF_Quit();
+        SDL_Quit();
+        return false;
+    }
+
+    font = TTF_OpenFont("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 24);
+    if (!font) {
+        SDL_DestroyRenderer(renderer);
+        SDL_DestroyWindow(window);
+        TTF_Quit();
         SDL_Quit();
         return false;
     }
@@ -43,11 +85,21 @@ bool gui_init(void)
     return true;
 }
 
-void gui_set_spaces(int available, int total)
+void gui_set_status(int available, int total, int active)
 {
     pthread_mutex_lock(&gui_mutex);
     current_available = available;
     current_total = total;
+    current_active = active;
+    pthread_mutex_unlock(&gui_mutex);
+}
+
+void gui_set_slot_car(int slot, int car_id)
+{
+    pthread_mutex_lock(&gui_mutex);
+    if (slot >= 0 && slot < NUM_SPACES) {
+        slot_car[slot] = car_id;
+    }
     pthread_mutex_unlock(&gui_mutex);
 }
 
@@ -63,34 +115,51 @@ bool gui_process_frame(void)
     pthread_mutex_lock(&gui_mutex);
     int available = current_available;
     int total = current_total;
+    int active = current_active;
+    bool finished = simulation_finished;
+
+    int local_slot_car[NUM_SPACES];
+    for (int i = 0; i < NUM_SPACES; i++) {
+        local_slot_car[i] = slot_car[i];
+    }
     pthread_mutex_unlock(&gui_mutex);
 
-    int occupied = total - available;
-
-    SDL_SetRenderDrawColor(renderer, 240, 240, 240, 255);
+    SDL_SetRenderDrawColor(renderer, 245, 245, 245, 255);
     SDL_RenderClear(renderer);
 
-    // Dibujar 3 espacios
-    for (int i = 0; i < total; i++) {
-        SDL_Rect box = {60 + i * 130, 80, 90, 90};
+    SDL_Color black = {0, 0, 0, 255};
 
-        if (i < occupied) {
-            // rojo = ocupado
-            SDL_SetRenderDrawColor(renderer, 220, 60, 60, 255);
+    char info[64];
+
+    snprintf(info, sizeof(info), "Available spaces: %d", available);
+    draw_text(info, 40, 30, black);
+
+    snprintf(info, sizeof(info), "Active cars: %d", active);
+    draw_text(info, 40, 70, black);
+
+    for (int i = 0; i < total; i++) {
+        SDL_Rect box = {60 + i * 180, 140, 100, 100};
+
+        if (local_slot_car[i] == -1) {
+            SDL_SetRenderDrawColor(renderer, 60, 180, 75, 255);   // verde
         } else {
-            // verde = libre
-            SDL_SetRenderDrawColor(renderer, 60, 180, 75, 255);
+            SDL_SetRenderDrawColor(renderer, 220, 60, 60, 255);   // rojo
         }
 
         SDL_RenderFillRect(renderer, &box);
 
-        // borde negro
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
         SDL_RenderDrawRect(renderer, &box);
+
+        if (local_slot_car[i] != -1) {
+            char car_label[32];
+            snprintf(car_label, sizeof(car_label), "Car %d", local_slot_car[i]);
+            draw_text(car_label, box.x + 15, box.y + 35, black);
+        }
     }
 
     SDL_RenderPresent(renderer);
-    SDL_Delay(16); // ~60 FPS
+    SDL_Delay(16);
     return true;
 }
 
@@ -98,7 +167,17 @@ void gui_close(void)
 {
     pthread_mutex_destroy(&gui_mutex);
 
+    if (font) TTF_CloseFont(font);
     if (renderer) SDL_DestroyRenderer(renderer);
     if (window) SDL_DestroyWindow(window);
+
+    TTF_Quit();
     SDL_Quit();
+}
+
+void gui_set_finished(bool finished)
+{
+    pthread_mutex_lock(&gui_mutex);
+    simulation_finished = finished;
+    pthread_mutex_unlock(&gui_mutex);
 }
