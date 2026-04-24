@@ -7,13 +7,21 @@
 void print_metrics(const char *algo_name, ProcessMetrics metrics[], int count) {
     printf("════════ %s ════════\n", algo_name);
     
+    // Prepare timestamp
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+    char timestamp[30];
+    strftime(timestamp, sizeof(timestamp), "%a %b %d %H:%M:%S %Y", t);
+
     // Print detailed logs
     printf("\n--- Execution Timeline ---\n");
     for(int i = 0; i < count; i++) {
-        printf("P%d: Arr=%3d  Start=%3d  End=%3d  (Burst=%d)\n",
-               metrics[i].process_id, metrics[i].arrival_time, 
-               metrics[i].start_time, metrics[i].end_time,
-               metrics[i].burst_time);
+        printf("[%s] Process %d (Burst %d): Arrived\n", timestamp,
+               metrics[i].process_id, metrics[i].burst_time);
+        printf("[%s] Process %d (Burst %d): Started\n", timestamp,
+               metrics[i].process_id, metrics[i].burst_time);
+        printf("[%s] Process %d (Burst %d): Completed\n", timestamp,
+               metrics[i].process_id, metrics[i].burst_time);
     }
     
     // Calculate and print metrics
